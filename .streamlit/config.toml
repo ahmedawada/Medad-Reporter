@@ -1,0 +1,3 @@
+[server]
+# Increase the maximum WebSocket message size to 500MB
+maxMessageSize = 500
