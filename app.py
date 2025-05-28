@@ -465,6 +465,28 @@ if 'loan_count_data_loaded' not in st.session_state:
     st.session_state.loan_count_data_loaded = False
 if 'loan_count_df' not in st.session_state:
     st.session_state.loan_count_df = None
+if 'circulation_data_loaded' not in st.session_state:
+    st.session_state.circulation_data_loaded = False
+
+# Add a Reset All Data button to the sidebar if user is logged in
+if st.session_state.logged_in:
+    st.sidebar.markdown("---")
+    
+    # Button to reset all data
+    if st.sidebar.button("Reset All Data", key="reset_all_button"):
+        # Reset all data-related session state variables
+        st.session_state.data_loaded = False
+        st.session_state.circulation_data_loaded = False
+        st.session_state.loan_count_data_loaded = False
+        st.session_state.final_df = None
+        st.session_state.circulation_df = None
+        st.session_state.loan_count_df = None
+        st.session_state.fines_df = None
+        st.session_state.patron_groups = None
+        if 'user_cache' in st.session_state:
+            st.session_state.user_cache = {}
+        st.sidebar.success("All data has been reset!")
+        st.experimental_rerun()
 
 # Main content area - only show if logged in
 if st.session_state.logged_in:
@@ -637,203 +659,231 @@ if st.session_state.logged_in:
                 )
             
             # Filter controls
-            st.subheader("Filters")
+            st.subheader("Bibliographic Report Filters")
             
             # Create a filtered copy of the DataFrame to preserve the original
             filtered_df = df.copy()
             
-            # Create layout with columns for filters
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                # Holding location filter
-                if 'holding_location_name' in filtered_df.columns:
-                    location_col = 'holding_location_name'
-                    holding_locations = sorted(filtered_df[location_col].dropna().unique().tolist())
-                    selected_holding_location = st.selectbox(
-                        "Holding Location",
-                        options=["All"] + holding_locations,
-                        key="filter_holding_location"
-                    )
-                    if selected_holding_location != "All":
-                        filtered_df = filtered_df[filtered_df[location_col] == selected_holding_location]
+            # Location and Material Type Filters
+            with st.expander("Location & Material Filters", expanded=True):
+                st.markdown("### Location & Material Details")
+                loc_col1, loc_col2 = st.columns(2)
                 
-                # Material name filter
-                if 'Material_name' in filtered_df.columns:
-                    material_types = sorted(filtered_df['Material_name'].dropna().unique().tolist())
-                    selected_material = st.selectbox(
-                        "Material Type",
-                        options=["All"] + material_types,
-                        key="filter_material_type"
-                    )
-                    if selected_material != "All":
-                        filtered_df = filtered_df[filtered_df['Material_name'] == selected_material]
-                
-                # Discovery suppress from instance filter
-                if 'discoverySuppress_x' in filtered_df.columns:
-                    discovery_suppress_instance = st.checkbox(
-                        "Discovery Suppress from Instance",
-                        key="filter_discovery_suppress_instance"
-                    )
-                    if discovery_suppress_instance:
-                        filtered_df = filtered_df[filtered_df['discoverySuppress_x'] == True]
-            
-            with col2:
-                # Item location filter (if different from holding location)
-                if 'item_location_name' in filtered_df.columns:
-                    item_location_col = 'item_location_name'
-                    item_locations = sorted(filtered_df[item_location_col].dropna().unique().tolist())
-                    selected_item_location = st.selectbox(
-                        "Item Location",
-                        options=["All"] + item_locations,
-                        key="filter_item_location"
-                    )
-                    if selected_item_location != "All":
-                        filtered_df = filtered_df[filtered_df[item_location_col] == selected_item_location]
-                
-                # Item status filter
-                if 'Item_Status' in filtered_df.columns:
-                    item_statuses = sorted(filtered_df['Item_Status'].dropna().unique().tolist())
-                    selected_status = st.selectbox(
-                        "Item Status",
-                        options=["All"] + item_statuses,
-                        key="filter_item_status"
-                    )
-                    if selected_status != "All":
-                        filtered_df = filtered_df[filtered_df['status.name'] == selected_status]
-                
-                # Discovery suppress from holding filter
-                if 'discoverySuppress_y' in filtered_df.columns:
-                    discovery_suppress_holding = st.checkbox(
-                        "Discovery Suppress from Holdings",
-                        key="filter_discovery_suppress_holding"
-                    )
-                    if discovery_suppress_holding:
-                        filtered_df = filtered_df[filtered_df['discoverySuppress_y'] == True]
-                
-                # Discovery suppress from holding filter
-                if 'discoverySuppress' in filtered_df.columns:
-                    discovery_suppress_item = st.checkbox(
-                        "Discovery Suppress from item",
-                        key="filter_discovery_suppress_item"
-                    )
-                    if discovery_suppress_item:
-                        filtered_df = filtered_df[filtered_df['discoverySuppress'] == True]
-            
-            with col3:
-                # Statistical code filter
-                if 'Statistical_code' in filtered_df.columns:
-                    # Get unique values for the statistical code
-                    stat_codes = sorted(filtered_df['Statistical_code'].dropna().unique().tolist())
+                with loc_col1:
+                    # Holding location filter
+                    if 'holding_location_name' in filtered_df.columns:
+                        location_col = 'holding_location_name'
+                        holding_locations = sorted(filtered_df[location_col].dropna().unique().tolist())
+                        selected_holding_location = st.selectbox(
+                            "Holding Location",
+                            options=["All"] + holding_locations,
+                            key="filter_holding_location"
+                        )
+                        if selected_holding_location != "All":
+                            filtered_df = filtered_df[filtered_df[location_col] == selected_holding_location]
                     
-                    # Add options for All and No Value
-                    filter_options = ["All", "No Statistical Code"] + stat_codes
-                    
-                    selected_stat_code = st.selectbox(
-                        "Statistical Code",
-                        options=filter_options,
-                        key="filter_stat_code"
-                    )
-                    
-                    if selected_stat_code == "No Statistical Code":
-                        # Filter for empty or null values
-                        filtered_df = filtered_df[filtered_df['Statistical_code'].isna() | 
-                                               (filtered_df['Statistical_code'] == '') | 
-                                               (filtered_df['Statistical_code'].astype(str) == 'nan')]
-                    elif selected_stat_code != "All":
-                        # Simple direct filter
-                        filtered_df = filtered_df[filtered_df['Statistical_code'] == selected_stat_code]
-            
+                    # Item location filter (if different from holding location)
+                    if 'item_location_name' in filtered_df.columns:
+                        item_location_col = 'item_location_name'
+                        item_locations = sorted(filtered_df[item_location_col].dropna().unique().tolist())
+                        selected_item_location = st.selectbox(
+                            "Item Location",
+                            options=["All"] + item_locations,
+                            key="filter_item_location"
+                        )
+                        if selected_item_location != "All":
+                            filtered_df = filtered_df[filtered_df[item_location_col] == selected_item_location]
                 
+                with loc_col2:
+                    # Material name filter
+                    if 'Material_name' in filtered_df.columns:
+                        material_types = sorted(filtered_df['Material_name'].dropna().unique().tolist())
+                        selected_material = st.selectbox(
+                            "Material Type",
+                            options=["All"] + material_types,
+                            key="filter_material_type"
+                        )
+                        if selected_material != "All":
+                            filtered_df = filtered_df[filtered_df['Material_name'] == selected_material]
+                    
+                    # Item status filter
+                    if 'Item Status' in filtered_df.columns:
+                        item_statuses = sorted(filtered_df['Item Status'].dropna().unique().tolist())
+                        selected_status = st.selectbox(
+                            "Item Status",
+                            options=["All"] + item_statuses,
+                            key="filter_item_status"
+                        )
+                        if selected_status != "All":
+                            filtered_df = filtered_df[filtered_df['status.name'] == selected_status]
+            
+            # Statistical Codes and Discovery Settings
+            with st.expander("Statistical Codes & Discovery Settings", expanded=True):
+                st.markdown("### Codes & Discovery")
+                code_col1, code_col2 = st.columns(2)
+                
+                with code_col1:
+                    # Statistical code filter
+                    if 'Statistical_code' in filtered_df.columns:
+                        # Get unique values for the statistical code
+                        stat_codes = sorted(filtered_df['Statistical_code'].dropna().unique().tolist())
+                        
+                        # Add options for All and No Value
+                        filter_options = ["All", "No Statistical Code"] + stat_codes
+                        
+                        selected_stat_code = st.selectbox(
+                            "Statistical Code",
+                            options=filter_options,
+                            key="filter_stat_code"
+                        )
+                        
+                        if selected_stat_code == "No Statistical Code":
+                            # Filter for empty or null values
+                            filtered_df = filtered_df[filtered_df['Statistical_code'].isna() | 
+                                                   (filtered_df['Statistical_code'] == '') | 
+                                                   (filtered_df['Statistical_code'].astype(str) == 'nan')]
+                        elif selected_stat_code != "All":
+                            # Simple direct filter
+                            filtered_df = filtered_df[filtered_df['Statistical_code'] == selected_stat_code]
+                
+                with code_col2:
+                    # Discovery suppress filters
+                    st.markdown("#### Discovery Settings")
+                    suppress_col1, suppress_col2 = st.columns(2)
+                    
+                    with suppress_col1:
+                        # Discovery suppress from instance filter
+                        if 'discoverySuppress_x' in filtered_df.columns:
+                            discovery_suppress_instance = st.checkbox(
+                                "Suppress - Instance",
+                                key="filter_discovery_suppress_instance"
+                            )
+                            if discovery_suppress_instance:
+                                filtered_df = filtered_df[filtered_df['discoverySuppress_x'] == True]
+                        
+                        # Discovery suppress from holding filter
+                        if 'discoverySuppress_y' in filtered_df.columns:
+                            discovery_suppress_holding = st.checkbox(
+                                "Suppress - Holdings",
+                                key="filter_discovery_suppress_holding"
+                            )
+                            if discovery_suppress_holding:
+                                filtered_df = filtered_df[filtered_df['discoverySuppress_y'] == True]
+                    
+                    with suppress_col2:
+                        # Discovery suppress from item filter
+                        if 'discoverySuppress' in filtered_df.columns:
+                            discovery_suppress_item = st.checkbox(
+                                "Suppress - Item",
+                                key="filter_discovery_suppress_item"
+                            )
+                            if discovery_suppress_item:
+                                filtered_df = filtered_df[filtered_df['discoverySuppress'] == True]
+            
+            # User Activity Filters
+            with st.expander("User Activity Filters", expanded=False):
+                st.markdown("### Created & Updated By")
+                
+                # Instance creators/updaters
+                st.markdown("#### Instance")
+                instance_col1, instance_col2 = st.columns(2)
+                
+                with instance_col1:
+                    # Instance Creator filter
+                    if 'Instance Creator' in filtered_df.columns:
+                        creators = sorted(filtered_df['Instance Creator'].dropna().unique().tolist())
+                        selected_creator = st.selectbox(
+                            "Created By",
+                            options=["All"] + creators,
+                            key="filter_instance_creator"
+                        )
+                        if selected_creator != "All":
+                            filtered_df = filtered_df[filtered_df['Instance Creator'] == selected_creator]
+                
+                with instance_col2:
+                    # Instance Updater filter
+                    if 'Instance Updater' in filtered_df.columns:
+                        updaters = sorted(filtered_df['Instance Updater'].dropna().unique().tolist())
+                        selected_updater = st.selectbox(
+                            "Updated By",
+                            options=["All"] + updaters,
+                            key="filter_instance_updater"
+                        )
+                        if selected_updater != "All":
+                            filtered_df = filtered_df[filtered_df['Instance Updater'] == selected_updater]
+                
+                # Holdings creators/updaters
+                st.markdown("#### Holdings")
+                holdings_col1, holdings_col2 = st.columns(2)
+                
+                with holdings_col1:
+                    # Holding Creator filter
+                    if 'Holding Creator' in filtered_df.columns:
+                        h_creators = sorted(filtered_df['Holding Creator'].dropna().unique().tolist())
+                        selected_h_creator = st.selectbox(
+                            "Created By",
+                            options=["All"] + h_creators,
+                            key="filter_holding_creator"
+                        )
+                        if selected_h_creator != "All":
+                            filtered_df = filtered_df[filtered_df['Holding Creator'] == selected_h_creator]
+                
+                with holdings_col2:
+                    # Holding Updater filter
+                    if 'Holding Updater' in filtered_df.columns:
+                        h_updaters = sorted(filtered_df['Holding Updater'].dropna().unique().tolist())
+                        selected_h_updater = st.selectbox(
+                            "Updated By",
+                            options=["All"] + h_updaters,
+                            key="filter_holding_updater"
+                        )
+                        if selected_h_updater != "All":
+                            filtered_df = filtered_df[filtered_df['Holding Updater'] == selected_h_updater]
+                
+                # Item creators/updaters
+                st.markdown("#### Item")
+                item_col1, item_col2 = st.columns(2)
+                
+                with item_col1:
+                    # Item Creator filter
+                    if 'Item Creator' in filtered_df.columns:
+                        i_creators = sorted(filtered_df['Item Creator'].dropna().unique().tolist())
+                        selected_i_creator = st.selectbox(
+                            "Created By",
+                            options=["All"] + i_creators,
+                            key="filter_item_creator"
+                        )
+                        if selected_i_creator != "All":
+                            filtered_df = filtered_df[filtered_df['Item Creator'] == selected_i_creator]
+                
+                with item_col2:
+                    # Item Updater filter
+                    if 'Item Updater' in filtered_df.columns:
+                        i_updaters = sorted(filtered_df['Item Updater'].dropna().unique().tolist())
+                        selected_i_updater = st.selectbox(
+                            "Updated By",
+                            options=["All"] + i_updaters,
+                            key="filter_item_updater"
+                        )
+                        if selected_i_updater != "All":
+                            filtered_df = filtered_df[filtered_df['Item Updater'] == selected_i_updater]
+            
 
-            # Create additional row for more filters
-            st.markdown("### Additional Filters")
-            col4, col5, col6 = st.columns(3)
-            
-            with col4:
-                # Instance Creator filter
-                if 'Instance Creator' in filtered_df.columns:
-                    creators = sorted(filtered_df['Instance Creator'].dropna().unique().tolist())
-                    selected_creator = st.selectbox(
-                        "Instance Creator",
-                        options=["All"] + creators,
-                        key="filter_instance_creator"
-                    )
-                    if selected_creator != "All":
-                        filtered_df = filtered_df[filtered_df['Instance Creator'] == selected_creator]
-                # Instance Updater filter
-                if 'Instance Updater' in filtered_df.columns:
-                    updaters = sorted(filtered_df['Instance Updater'].dropna().unique().tolist())
-                    selected_updater = st.selectbox(
-                        "Instance Updater",
-                        options=["All"] + updaters,
-                        key="filter_instance_updater"
-                    )
-                    if selected_updater != "All":
-                        filtered_df = filtered_df[filtered_df['Instance Updater'] == selected_updater]
-            
-            with col5:
-                # Holding Creator filter
-                if 'Holding Creator' in filtered_df.columns:
-                    h_creators = sorted(filtered_df['Holding Creator'].dropna().unique().tolist())
-                    selected_h_creator = st.selectbox(
-                        "Holding Creator",
-                        options=["All"] + h_creators,
-                        key="filter_holding_creator"
-                    )
-                    if selected_h_creator != "All":
-                        filtered_df = filtered_df[filtered_df['Holding Creator'] == selected_h_creator]
-            
-            with col6:
-                # Holding Updater filter
-                if 'Holding Updater' in filtered_df.columns:
-                    h_updaters = sorted(filtered_df['Holding Updater'].dropna().unique().tolist())
-                    selected_h_updater = st.selectbox(
-                        "Holding Updater",
-                        options=["All"] + h_updaters,
-                        key="filter_holding_updater"
-                    )
-                    if selected_h_updater != "All":
-                        filtered_df = filtered_df[filtered_df['Holding Updater'] == selected_h_updater]
-            
-            # Create a third row for item creator/updater filters
-            col7, col8, _ = st.columns(3)
-            
-            with col7:
-                # Item Creator filter
-                if 'Item Creator' in filtered_df.columns:
-                    i_creators = sorted(filtered_df['Item Creator'].dropna().unique().tolist())
-                    selected_i_creator = st.selectbox(
-                        "Item Creator",
-                        options=["All"] + i_creators,
-                        key="filter_item_creator"
-                    )
-                    if selected_i_creator != "All":
-                        filtered_df = filtered_df[filtered_df['Item Creator'] == selected_i_creator]
-            
-            with col8:
-                # Item Updater filter
-                if 'Item Updater' in filtered_df.columns:
-                    i_updaters = sorted(filtered_df['Item Updater'].dropna().unique().tolist())
-                    selected_i_updater = st.selectbox(
-                        "Item Updater",
-                        options=["All"] + i_updaters,
-                        key="filter_item_updater"
-                    )
-                    if selected_i_updater != "All":
-                        filtered_df = filtered_df[filtered_df['Item Updater'] == selected_i_updater]
+
+
+
 
             # Advanced filtering section
             with st.expander("Advanced Filtering", expanded=False):
-                st.markdown("""
-                ### Advanced Filtering
+                st.markdown("### Advanced Filtering")
                 
+                st.info("""
                 Enter Python code to filter the dataframe. Your code should be a condition that would go inside df[] brackets.
                 
-                Available variables:
+                **Available variables:**
                 - `df`: The current filtered dataframe
                 
-                Examples:
+                **Examples:**
                 - `df['Title'].str.contains('Python')`
                 - `(df['Publication Date'] > '2010') & (df['Item Status'] == 'Available')`
                 - `df['Barcode'].str.startswith('123')`
@@ -844,7 +894,9 @@ if st.session_state.logged_in:
                                            height=100,
                                            key="advanced_filter_code")
                 
-                apply_button = st.button("Apply Advanced Filter", key="advanced_filter_button")
+                apply_col1, apply_col2 = st.columns([1, 3])
+                with apply_col1:
+                    apply_button = st.button("Apply Filter", key="advanced_filter_button")
                 
                 if apply_button and code_filter.strip():
                     try:
@@ -945,10 +997,7 @@ if st.session_state.logged_in:
                 
                 st.success(f"Export complete! {len(filtered_df)} records exported.")
             
-            # Button to reset data
-            if st.button("Reset Data", key="reset_button"):
-                st.session_state.data_loaded = False
-                st.experimental_rerun()
+            # Export data section ends here
     
     with tabs[1]:  # Circulation Report Tab
         #st.subheader("Circulation Report")
@@ -1014,185 +1063,200 @@ if st.session_state.logged_in:
                 # Get the DataFrame from session state
                 filtered_df = st.session_state.circulation_df.copy()
                 
-                # Create filter columns
-                col1, col2, col3 = st.columns(3)
+                st.subheader("Circulation Report Filters")
                 
-                # Display date range filters
-                with col1:
-                    if 'loanDate' in filtered_df.columns:
-                        #st.subheader("Loan Date Filter")
-                        # Convert to datetime if not already, and handle timezone information
-                        if filtered_df['loanDate'].dtype != 'datetime64[ns]':
-                            filtered_df['loanDate'] = pd.to_datetime(filtered_df['loanDate'], errors='coerce', utc=True)
-                        
-                        # Get min and max dates
-                        min_date = filtered_df['loanDate'].min().date() if not filtered_df['loanDate'].isna().all() else datetime.date.today()
-                        max_date = filtered_df['loanDate'].max().date() if not filtered_df['loanDate'].isna().all() else datetime.date.today()
-                        
-                        # Date range picker
-                        loan_date_range = st.date_input(
-                            "Select Loan Date Range",
-                            value=(min_date, max_date),
-                            min_value=min_date,
-                            max_value=max_date
-                        )
-                        
-                        # Apply filter if a valid range is selected
-                        if len(loan_date_range) == 2:
-                            start_date, end_date = loan_date_range
-                            # Convert to pandas datetime for filtering with timezone info
-                            start_date = pd.Timestamp(start_date).tz_localize('UTC')
-                            end_date = (pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)).tz_localize('UTC')
-                            # Apply filter
-                            filtered_df = filtered_df[(filtered_df['loanDate'] >= start_date) & 
-                                                   (filtered_df['loanDate'] <= end_date)]
-                
-                with col2:
-                    if 'returnDate' in filtered_df.columns:
-                        #st.subheader("Check in Date Filter")
-                        # Convert to datetime if not already, and handle timezone information
-                        if filtered_df['returnDate'].dtype != 'datetime64[ns]':
-                            filtered_df['returnDate'] = pd.to_datetime(filtered_df['returnDate'], errors='coerce', utc=True)
-                        
-                        # Only proceed if there are valid dates
-                        if not filtered_df['returnDate'].isna().all():
+                # Create collapsible section for date filters
+                with st.expander("Date Filters", expanded=True):
+                    st.markdown("### Date Range Filters")
+                    date_col1, date_col2 = st.columns(2)
+                    
+                    # Display date range filters
+                    with date_col1:
+                        if 'loanDate' in filtered_df.columns:
+                            # Convert to datetime if not already, and handle timezone information
+                            if filtered_df['loanDate'].dtype != 'datetime64[ns]':
+                                filtered_df['loanDate'] = pd.to_datetime(filtered_df['loanDate'], errors='coerce', utc=True)
+                            
                             # Get min and max dates
-                            min_date = filtered_df['returnDate'].min().date()
-                            max_date = filtered_df['returnDate'].max().date()
+                            min_date = filtered_df['loanDate'].min().date() if not filtered_df['loanDate'].isna().all() else datetime.date.today()
+                            max_date = filtered_df['loanDate'].max().date() if not filtered_df['loanDate'].isna().all() else datetime.date.today()
                             
                             # Date range picker
-                            checkin_date_range = st.date_input(
-                                "Select Check in Date Range",
+                            loan_date_range = st.date_input(
+                                "Loan Date Range",
                                 value=(min_date, max_date),
                                 min_value=min_date,
                                 max_value=max_date
                             )
                             
                             # Apply filter if a valid range is selected
-                            if len(checkin_date_range) == 2:
-                                start_date, end_date = checkin_date_range
+                            if len(loan_date_range) == 2:
+                                start_date, end_date = loan_date_range
                                 # Convert to pandas datetime for filtering with timezone info
                                 start_date = pd.Timestamp(start_date).tz_localize('UTC')
                                 end_date = (pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)).tz_localize('UTC')
                                 # Apply filter
-                                filtered_df = filtered_df[(filtered_df['returnDate'] >= start_date) & 
-                                                        (filtered_df['returnDate'] <= end_date)]
-                
-                with col3:
-                    # Circulation Action filter
-                    if 'action' in filtered_df.columns:
-                        action_values = sorted(filtered_df['action'].dropna().unique().tolist())
-                        selected_action = st.multiselect("Circulation Action", action_values)
-                        if selected_action:
-                            filtered_df = filtered_df[filtered_df['action'].isin(selected_action)]
-                
-                # Create another row of filters
-                col4, col5, col6 = st.columns(3)
-                
-                with col4:
-                    # Circulation Status filter
-                    if 'status.name' in filtered_df.columns:
-                        status_values = sorted(filtered_df['status.name'].dropna().unique().tolist())
-                        selected_status = st.multiselect("Circulation Status", status_values)
-                        if selected_status:
-                            filtered_df = filtered_df[filtered_df['status.name'].isin(selected_status)]
-                
-                with col5:
-                    # Patron Group filter
-                    if 'patronGroupName' in filtered_df.columns:
-                        patron_values = sorted(filtered_df['patronGroupName'].dropna().unique().tolist())
-                        selected_patron = st.multiselect("Patron Group", patron_values)
-                        if selected_patron:
-                            filtered_df = filtered_df[filtered_df['patronGroupName'].isin(selected_patron)]
-                
-                with col6:
-                    # Material Type filter
-                    if 'materialType.name' in filtered_df.columns:
-                        material_values = sorted(filtered_df['materialType.name'].dropna().unique().tolist())
-                        selected_material = st.multiselect("Material Type", material_values)
-                        if selected_material:
-                            filtered_df = filtered_df[filtered_df['materialType.name'].isin(selected_material)]
-                
-                # Create another row of filters
-                col7, col8, col9 = st.columns(3)
-                
-                with col7:
-                    # Item Location filter
-                    if 'location.name' in filtered_df.columns:
-                        location_values = sorted(filtered_df['location.name'].dropna().unique().tolist())
-                        selected_location = st.multiselect("Item Location", location_values)
-                        if selected_location:
-                            filtered_df = filtered_df[filtered_df['location.name'].isin(selected_location)]
-                
-                with col8:
-                    # Fine Status filter
-                    # Using fines data from session state
-                    if 'fines_df' in st.session_state and not st.session_state.fines_df.empty:
-                        if 'feeFineOwner' in st.session_state.fines_df:
-                            fine_values = sorted(st.session_state.fines_df['feeFineOwner'].dropna().unique().tolist())
-                            selected_fine = st.multiselect("Fine Status", fine_values)
-                            if selected_fine and 'id_Loans' in filtered_df.columns:
-                                # This would require joining with fines data, simplified for now
-                                pass
-                
-                with col9:
-                    # Payment Status filter
-                    # Using fines data from session state
-                    if 'fines_df' in st.session_state and not st.session_state.fines_df.empty:
-                        if 'paymentStatus.name' in st.session_state.fines_df:
-                            payment_values = sorted(st.session_state.fines_df['paymentStatus.name'].dropna().unique().tolist())
-                            selected_payment = st.multiselect("Payment Status", payment_values)
-                            if selected_payment and 'id_Loans' in filtered_df.columns:
-                                # This would require joining with fines data, simplified for now
-                                pass
-                
-                # Tags filter
-                if 'tags.tagList' in filtered_df.columns:
-                    # Extract all unique tags from the tagList columns which might contain lists
-                    all_tags = []
-                    for tags in filtered_df['tags.tagList'].dropna():
-                        if isinstance(tags, list):
-                            all_tags.extend(tags)
-                        elif isinstance(tags, str):
-                            # Handle case where tags might be a string representation of a list
-                            try:
-                                tag_list = ast.literal_eval(tags)
-                                if isinstance(tag_list, list):
-                                    all_tags.extend(tag_list)
-                            except (ValueError, SyntaxError):
-                                # If not a valid list representation, treat as a single tag
-                                all_tags.append(tags)
+                                filtered_df = filtered_df[(filtered_df['loanDate'] >= start_date) & 
+                                                       (filtered_df['loanDate'] <= end_date)]
                     
-                    unique_tags = sorted(set(all_tags))
-                    selected_tags = st.multiselect("Tags", unique_tags)
-                    
-                    if selected_tags:
-                        # Filter rows where any of the selected tags are present
-                        def check_tags(x):
-                            # Handle NaN values
-                            if x is None or (hasattr(x, 'isna') and x.isna().any()):
-                                return False
+                    with date_col2:
+                        if 'returnDate' in filtered_df.columns:
+                            # Convert to datetime if not already, and handle timezone information
+                            if filtered_df['returnDate'].dtype != 'datetime64[ns]':
+                                filtered_df['returnDate'] = pd.to_datetime(filtered_df['returnDate'], errors='coerce', utc=True)
                             
-                            tag_list = []
-                            try:
-                                if isinstance(x, list):
-                                    tag_list = x
-                                elif isinstance(x, str) and x.strip():
-                                    try:
-                                        parsed = ast.literal_eval(x)
-                                        if isinstance(parsed, list):
-                                            tag_list = parsed
-                                        else:
-                                            tag_list = [x]
-                                    except (ValueError, SyntaxError):
-                                        tag_list = [x]
+                            # Only proceed if there are valid dates
+                            if not filtered_df['returnDate'].isna().all():
+                                # Get min and max dates
+                                min_date = filtered_df['returnDate'].min().date()
+                                max_date = filtered_df['returnDate'].max().date()
                                 
-                                return any(tag in tag_list for tag in selected_tags)
-                            except:
-                                # If any error occurs, assume no match
-                                return False
+                                # Date range picker
+                                checkin_date_range = st.date_input(
+                                    "Check-in Date Range",
+                                    value=(min_date, max_date),
+                                    min_value=min_date,
+                                    max_value=max_date
+                                )
+                                
+                                # Apply filter if a valid range is selected
+                                if len(checkin_date_range) == 2:
+                                    start_date, end_date = checkin_date_range
+                                    # Convert to pandas datetime for filtering with timezone info
+                                    start_date = pd.Timestamp(start_date).tz_localize('UTC')
+                                    end_date = (pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)).tz_localize('UTC')
+                                    # Apply filter
+                                    filtered_df = filtered_df[(filtered_df['returnDate'] >= start_date) & 
+                                                            (filtered_df['returnDate'] <= end_date)]
+                
+                # Create collapsible section for item and circulation filters
+                with st.expander("Item & Circulation Filters", expanded=True):
+                    st.markdown("### Item & Circulation Details")
+                    circ_col1, circ_col2, circ_col3 = st.columns(3)
+                    
+                    with circ_col1:
+                        # Circulation Action filter
+                        if 'action' in filtered_df.columns:
+                            action_values = sorted(filtered_df['action'].dropna().unique().tolist())
+                            selected_action = st.multiselect("Circulation Action", action_values)
+                            if selected_action:
+                                filtered_df = filtered_df[filtered_df['action'].isin(selected_action)]
+                    
+                    with circ_col2:
+                        # Circulation Status filter
+                        if 'status.name' in filtered_df.columns:
+                            status_values = sorted(filtered_df['status.name'].dropna().unique().tolist())
+                            selected_status = st.multiselect("Circulation Status", status_values)
+                            if selected_status:
+                                filtered_df = filtered_df[filtered_df['status.name'].isin(selected_status)]
+                    
+                    with circ_col3:
+                        # Material Type filter
+                        if 'materialType.name' in filtered_df.columns:
+                            material_values = sorted(filtered_df['materialType.name'].dropna().unique().tolist())
+                            selected_material = st.multiselect("Material Type", material_values)
+                            if selected_material:
+                                filtered_df = filtered_df[filtered_df['materialType.name'].isin(selected_material)]
+                
+                # Create collapsible section for patron and location filters
+                with st.expander("Patron & Location Filters", expanded=True):
+                    st.markdown("### Patron & Location Details")
+                    patron_col1, patron_col2 = st.columns(2)
+                    
+                    with patron_col1:
+                        # Patron Group filter
+                        if 'patronGroupName' in filtered_df.columns:
+                            patron_values = sorted(filtered_df['patronGroupName'].dropna().unique().tolist())
+                            selected_patron = st.multiselect("Patron Group", patron_values)
+                            if selected_patron:
+                                filtered_df = filtered_df[filtered_df['patronGroupName'].isin(selected_patron)]
+                    
+                    with patron_col2:
+                        # Item Location filter
+                        if 'location.name' in filtered_df.columns:
+                            location_values = sorted(filtered_df['location.name'].dropna().unique().tolist())
+                            selected_location = st.multiselect("Item Location", location_values)
+                            if selected_location:
+                                filtered_df = filtered_df[filtered_df['location.name'].isin(selected_location)]
+                
+                # Create collapsible section for financial filters
+                with st.expander("Financial Filters", expanded=False):
+                    st.markdown("### Fines & Payments")
+                    fine_col1, fine_col2 = st.columns(2)
+                    
+                    with fine_col1:
+                        # Fine Status filter
+                        # Using fines data from session state
+                        if 'fines_df' in st.session_state and not st.session_state.fines_df.empty:
+                            if 'feeFineOwner' in st.session_state.fines_df:
+                                fine_values = sorted(st.session_state.fines_df['feeFineOwner'].dropna().unique().tolist())
+                                selected_fine = st.multiselect("Fine Status", fine_values)
+                                if selected_fine and 'id_Loans' in filtered_df.columns:
+                                    # This would require joining with fines data, simplified for now
+                                    pass
+                    
+                    with fine_col2:
+                        # Payment Status filter
+                        # Using fines data from session state
+                        if 'fines_df' in st.session_state and not st.session_state.fines_df.empty:
+                            if 'paymentStatus.name' in st.session_state.fines_df:
+                                payment_values = sorted(st.session_state.fines_df['paymentStatus.name'].dropna().unique().tolist())
+                                selected_payment = st.multiselect("Payment Status", payment_values)
+                                if selected_payment and 'id_Loans' in filtered_df.columns:
+                                    # This would require joining with fines data, simplified for now
+                                    pass
+                
+                # Create collapsible section for tags filter
+                with st.expander("Tags Filter", expanded=False):
+                    # Tags filter
+                    if 'tags.tagList' in filtered_df.columns:
+                        # Extract all unique tags from the tagList columns which might contain lists
+                        all_tags = []
+                        for tags in filtered_df['tags.tagList'].dropna():
+                            if isinstance(tags, list):
+                                all_tags.extend(tags)
+                            elif isinstance(tags, str):
+                                # Handle case where tags might be a string representation of a list
+                                try:
+                                    tag_list = ast.literal_eval(tags)
+                                    if isinstance(tag_list, list):
+                                        all_tags.extend(tag_list)
+                                except (ValueError, SyntaxError):
+                                    # If not a valid list representation, treat as a single tag
+                                    all_tags.append(tags)
                         
-                        filtered_df = filtered_df[filtered_df['tags.tagList'].apply(check_tags)]
+                        unique_tags = sorted(set(all_tags))
+                        selected_tags = st.multiselect("Tags", unique_tags)
+                        
+                        if selected_tags:
+                            # Filter rows where any of the selected tags are present
+                            def check_tags(x):
+                                # Handle NaN values
+                                if x is None or (hasattr(x, 'isna') and x.isna().any()):
+                                    return False
+                                
+                                tag_list = []
+                                try:
+                                    if isinstance(x, list):
+                                        tag_list = x
+                                    elif isinstance(x, str) and x.strip():
+                                        try:
+                                            parsed = ast.literal_eval(x)
+                                            if isinstance(parsed, list):
+                                                tag_list = parsed
+                                            else:
+                                                tag_list = [x]
+                                        except (ValueError, SyntaxError):
+                                            tag_list = [x]
+                                    
+                                    return any(tag in tag_list for tag in selected_tags)
+                                except:
+                                    # If any error occurs, assume no match
+                                    return False
+                            
+                            filtered_df = filtered_df[filtered_df['tags.tagList'].apply(check_tags)]
+                
+                st.markdown("---")
                 
                 # Column selection
                 all_columns = filtered_df.columns.tolist()
@@ -1242,10 +1306,7 @@ if st.session_state.logged_in:
                 else:
                     st.warning("Please select at least one column to display")
                     
-                # Button to reset data
-                if st.button("Reset Data", key="circ_reset_button"):
-                    st.session_state.circulation_data_loaded = False
-                    st.experimental_rerun()
+                # Export data section ends here
             else:
                 st.warning("No circulation data available. Please load the data first.")
                 
@@ -1374,13 +1435,24 @@ if st.session_state.logged_in:
                     if 'loan_count' in filtered_df.columns:
                         min_loans = int(filtered_df['loan_count'].min())
                         max_loans = int(filtered_df['loan_count'].max())
-                        loan_count_range = st.slider(
-                            "Loan Count Range", 
-                            min_value=min_loans,
-                            max_value=max_loans,
-                            value=(min_loans, max_loans),
-                            key="loan_count_range"
-                        )
+                        
+                        # Handle the case where min and max are equal
+                        if min_loans == max_loans:
+                            st.info(f"All items have the same loan count: {min_loans}")
+                            loan_count_range = (min_loans, max_loans)
+                        else:
+                            # Ensure max is greater than min to avoid RangeError
+                            if max_loans <= min_loans:
+                                max_loans = min_loans + 1
+                                
+                            loan_count_range = st.slider(
+                                "Loan Count Range", 
+                                min_value=min_loans,
+                                max_value=max_loans,
+                                value=(min_loans, max_loans),
+                                key="loan_count_range"
+                            )
+                        
                         filtered_df = filtered_df[
                             (filtered_df['loan_count'] >= loan_count_range[0]) & 
                             (filtered_df['loan_count'] <= loan_count_range[1])
@@ -1442,10 +1514,7 @@ if st.session_state.logged_in:
                 else:
                     st.warning("Please select at least one column to display")
                     
-                # Button to reset data
-                if st.button("Reset Data", key="loan_count_reset_button"):
-                    st.session_state.loan_count_data_loaded = False
-                    st.experimental_rerun()
+                # Export data section ends here
 else:
     # Show welcome message if not logged in
     st.info("👈 Please enter your Medad credentials in the sidebar to get started.")
